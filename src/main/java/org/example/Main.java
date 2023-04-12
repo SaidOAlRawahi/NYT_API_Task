@@ -14,40 +14,71 @@ public class Main {
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
         System.out.println("------------------Welcome to NYT Articles Search------------------");
-        Article[] articles;
-        while (true){
+        Article[] articles = null;
+        while (true) {
             System.out.println("Select an Action");
             System.out.println("1- Search articles from Api");
             System.out.println("2- Search articles from DB");
-            System.out.println("3- Exit");
+            System.out.println("3- Search Most Popular articles");
+            System.out.println("4- Exit");
             String selection = sc.next();
-            if(selection.equals("1")){
-                articlesFromApiOption();
-            }
-            else if (selection.equals("2")){
-                articlesFromDBOption();
-            }
-            else if (selection.equals("3")) {
+            if (selection.equals("1")) {
+                articles = articlesFromApiOption();
+            } else if (selection.equals("2")) {
+                articles = articlesFromDBOption();
+            } else if (selection.equals("3")) {
+                try {
+                    printArticles(getMostPopArticles());
+                } catch (IOException e) {
+                    System.out.println(e);
+                }
+            } else if (selection.equals("4")) {
                 break;
-            }
-            else {
+            } else {
                 System.out.println("Invalid Input");
             }
         }
 
     }
 
-    private static void articlesFromDBOption() {
+    private static Article[] getMostPopArticles() throws IOException {
+        String apiUrl = "https://api.nytimes.com/svc/search/v2/articlesearch.json?q=most%20popular&api-key=F5sDtSkCBG8qfXGtrJcwktG8YdrIL9pX";
+        URL url = new URL(apiUrl);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("Accept", "application/json");
+
+        if (conn.getResponseCode() != 200) {
+            throw new RuntimeException("HTTP error code : " + conn.getResponseCode());
+        }
+
+        BufferedReader br = new BufferedReader(new InputStreamReader((conn.getInputStream())));
+        String output;
+        StringBuilder json = new StringBuilder();
+
+        while ((output = br.readLine()) != null) {
+            json.append(output);
+        }
+
+        conn.disconnect();
+
+        Gson gson = new Gson();
+        NYTSearchApiResponse apiResponses = gson.fromJson(json.toString(), NYTSearchApiResponse.class);
+        return apiResponses.response.docs;
+    }
+
+    private static Article[] articlesFromDBOption() {
         Scanner sc = new Scanner(System.in);
         System.out.print("From Which Category You want to get the articles from?: ");
         String category = sc.next();
         Article[] articles;
-        try{
+        try {
             articles = getArticlesByCategory(category);
             printArticles(articles);
-        }
-        catch (Exception e){
+            return articles;
+        } catch (Exception e) {
             System.out.println(e);
+            return null;
         }
     }
 
@@ -59,12 +90,12 @@ public class Main {
         DriverManager.registerDriver(driver);
         Connection con = DriverManager.getConnection(url, "sa", "root");
         Statement st = con.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
-        ResultSet rs = st.executeQuery("SELECT * FROM articles WHERE LOWER(category) LIKE '%"+category+"%'");
+        ResultSet rs = st.executeQuery("SELECT * FROM articles WHERE LOWER(category) LIKE '%" + category + "%' order by publish_date");
         rs.last();
         Article[] articles = new Article[rs.getRow()];
         rs.beforeFirst();
         int i = 0;
-        while(rs.next()){
+        while (rs.next()) {
             Article article = new Article();
             article.headline.main = rs.getString(2);
             article.byline.original = rs.getString(3);
@@ -77,7 +108,7 @@ public class Main {
         return articles;
     }
 
-    private static void articlesFromApiOption() {
+    private static Article[] articlesFromApiOption() {
         NYTSearchApiResponse response;
         Scanner sc = new Scanner(System.in);
         System.out.print("What would you want to search about: ");
@@ -86,8 +117,10 @@ public class Main {
             response = getArticlesBySearch(search);
             printArticles(response.response.docs);
             addArticlesToDB(response.response.docs);
+            return response.response.docs;
         } catch (Exception e) {
             System.out.println(e);
+            return null;
         }
     }
 
@@ -98,7 +131,7 @@ public class Main {
         Driver driver = (Driver) Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver").newInstance();
         DriverManager.registerDriver(driver);
         Connection con = DriverManager.getConnection(url, "sa", "root");
-        for (Article article:articles) {
+        for (Article article : articles) {
             PreparedStatement st = con.prepareStatement("insert into articles\n" +
                     "values (?,?,?,?,?)");
             st.setString(1, article.headline.main);
@@ -111,8 +144,9 @@ public class Main {
         con.close();
 
     }
-    static void printArticles(Article[] articles){
-        for (Article article: articles){
+
+    static void printArticles(Article[] articles) {
+        for (Article article : articles) {
             System.out.println("---------------------------------------");
             System.out.println(article.headline.main);
             System.out.println(article.byline.original);
@@ -122,8 +156,9 @@ public class Main {
             System.out.println("---------------------------------------");
         }
     }
+
     private static NYTSearchApiResponse getArticlesBySearch(String search) throws IOException {
-        String apiUrl = "https://api.nytimes.com/svc/search/v2/articlesearch.json?q="+search+"&api-key=F5sDtSkCBG8qfXGtrJcwktG8YdrIL9pX";
+        String apiUrl = "https://api.nytimes.com/svc/search/v2/articlesearch.json?q=" + search + "&api-key=F5sDtSkCBG8qfXGtrJcwktG8YdrIL9pX";
         URL url = new URL(apiUrl);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
