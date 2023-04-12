@@ -6,7 +6,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.sql.*;
 import java.util.Scanner;
@@ -15,27 +14,83 @@ public class Main {
     public static void main(String[] args) {
         Scanner sc = new Scanner(System.in);
         System.out.println("------------------Welcome to NYT Articles Search------------------");
-        NYTSearchApiResponse response;
+        Article[] articles;
         while (true){
-            System.out.println("What would you want to search about: ");
-            String search = sc.next();
-            try {
-                response = getArticlesBySearch(search);
-                printArticles(response.response.docs);
-                addArticlesToDB(response.response.docs);
-            } catch (Exception e) {
-                System.out.println(e);
+            System.out.println("Select an Action");
+            System.out.println("1- Search articles from Api");
+            System.out.println("2- Search articles from DB");
+            System.out.println("3- Exit");
+            String selection = sc.next();
+            if(selection.equals("1")){
+                articlesFromApiOption();
             }
-            System.out.println("Do you want to search for more articles (Y/N)?");
-            String repeat = sc.next();
-            if(!repeat.equalsIgnoreCase("y")){
-                if(!repeat.equalsIgnoreCase("n")){
-                    System.out.println("Invalid Input");
-                }
+            else if (selection.equals("2")){
+                articlesFromDBOption();
+            }
+            else if (selection.equals("3")) {
                 break;
             }
+            else {
+                System.out.println("Invalid Input");
+            }
+        }
+
+    }
+
+    private static void articlesFromDBOption() {
+        Scanner sc = new Scanner(System.in);
+        System.out.print("From Which Category You want to get the articles from?: ");
+        String category = sc.next();
+        Article[] articles;
+        try{
+            articles = getArticlesByCategory(category);
+            printArticles(articles);
+        }
+        catch (Exception e){
+            System.out.println(e);
         }
     }
+
+    static Article[] getArticlesByCategory(String category) throws ClassNotFoundException, SQLException, InstantiationException, IllegalAccessException {
+        String url = "jdbc:sqlserver://localhost:1433;" + "databaseName=NYT;" + "encrypt=true;"
+                + "trustServerCertificate=true";
+
+        Driver driver = (Driver) Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver").newInstance();
+        DriverManager.registerDriver(driver);
+        Connection con = DriverManager.getConnection(url, "sa", "root");
+        Statement st = con.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
+        ResultSet rs = st.executeQuery("SELECT * FROM articles WHERE LOWER(category) LIKE '%"+category+"%'");
+        rs.last();
+        Article[] articles = new Article[rs.getRow()];
+        rs.beforeFirst();
+        int i = 0;
+        while(rs.next()){
+            Article article = new Article();
+            article.headline.main = rs.getString(2);
+            article.byline.original = rs.getString(3);
+            article.pub_date = rs.getString(4);
+            article.section_name = rs.getString(5);
+            article.lead_paragraph = rs.getString(6);
+            articles[i] = article;
+            i++;
+        }
+        return articles;
+    }
+
+    private static void articlesFromApiOption() {
+        NYTSearchApiResponse response;
+        Scanner sc = new Scanner(System.in);
+        System.out.print("What would you want to search about: ");
+        String search = sc.next();
+        try {
+            response = getArticlesBySearch(search);
+            printArticles(response.response.docs);
+            addArticlesToDB(response.response.docs);
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+    }
+
     static void addArticlesToDB(Article[] articles) throws SQLException, ClassNotFoundException, InstantiationException, IllegalAccessException {
         String url = "jdbc:sqlserver://localhost:1433;" + "databaseName=NYT;" + "encrypt=true;"
                 + "trustServerCertificate=true";
